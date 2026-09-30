@@ -275,13 +275,13 @@ input[type=file]{display:none}
       <div style="font-size:36px;font-weight:700;color:#34D399;line-height:1;letter-spacing:-.5px">6.198</div>
       <div style="font-size:18px;font-weight:700;color:#fff;margin-top:5px">$665,4M</div>
       <div class="scard-divider"></div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:5px">
         <span style="font-size:12px;color:#A78BFA;font-weight:600">Abonado</span>
-        <span style="font-size:16px;font-weight:700;color:#A78BFA">$618,6M</span>
+        <span style="font-size:14px;font-weight:700;color:#A78BFA;white-space:nowrap">$618,6M</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <span style="font-size:12px;color:#F87171;font-weight:600">Faltante</span>
-        <span style="font-size:16px;font-weight:700;color:#F87171">-$9,9M <span style="font-size:10px">1.6%</span></span>
+        <span style="font-size:14px;font-weight:700;color:#F87171;white-space:nowrap">-$9,9M <span style="font-size:10px">1.6%</span></span>
       </div>
     </div>
     <!-- 3 ENTREGADOS -->
@@ -1783,6 +1783,23 @@ function computeClaimsOperativos(claimsRaw){
   return{total:rows.length,byMotivo,byStore,byDay,unmatched,unmatchedTotal};
 }
 
+// Fill rate y reclamos: se calculan con los Excel cargados en la sesión y se GUARDAN en la nube
+// (solo el resultado ya calculado, pocos KB), así el que abre el link después también los ve.
+function getFR(monthId,rows){
+  return computeFillRate(rows,MONTH_EXTRA[monthId]?.missing)||(MONTH_DATA[monthId]&&MONTH_DATA[monthId].frSaved)||null;
+}
+function getClaims(monthId){
+  return computeClaimsOperativos(MONTH_EXTRA[monthId]?.claims)||(MONTH_DATA[monthId]&&MONTH_DATA[monthId].claimsSaved)||null;
+}
+function snapshotFrClaims(monthId){
+  const d=MONTH_DATA[monthId];if(!d)return false;
+  let changed=false;
+  const fr=computeFillRate(d.rows,MONTH_EXTRA[monthId]?.missing);
+  if(fr){d.frSaved=fr;changed=true;}
+  const cl=computeClaimsOperativos(MONTH_EXTRA[monthId]?.claims);
+  if(cl){d.claimsSaved=cl;changed=true;}
+  return changed;
+}
 function loadExtraFile(event,monthId,type){
   const file=event.target.files[0];
   if(!file)return;
@@ -1800,6 +1817,7 @@ function loadExtraFile(event,monthId,type){
       const prevRows=MONTH_EXTRA[monthId][type];
       MONTH_EXTRA[monthId][type]=prevRows&&prevRows.length?prevRows.concat(raw):raw;
       finalizeOnTimePrep(monthId,true); // si ya están los 3 + el detalle de pedidos, cierra y persiste
+      if((type==='missing'||type==='claims')&&snapshotFrClaims(monthId))guardarEnNube(monthId);
       if(activeMonth===monthId)renderMonth(MONTH_DATA[monthId],monthId);
     }catch(err){alert('Error al procesar: '+err.message);}
   };
@@ -2075,8 +2093,8 @@ function renderMonth(d, monthId){
   const{summary:s,coords,fmts,ships,stores,daily,ageDly,lstVencShips={rt:[],pickup:[],delivery:[]},lstVencDaily={},lstDailyIds={},rows=[]}=d;
   finalizeOnTimePrep(monthId,false); // refresco en memoria si hay datos frescos esta sesión (sin llamar a la nube)
   const otp=d.onTimePrep||null; // snapshot de on time (persistido o recién calculado)
-  const fr=computeFillRate(rows,MONTH_EXTRA[monthId]?.missing); // fill rate general, reutilizado en varias tablas
-  const claimsOp=computeClaimsOperativos(MONTH_EXTRA[monthId]?.claims); // reclamos operativos, reutilizado en KPI y Detalle por tienda
+  const fr=getFR(monthId,rows); // fill rate general, reutilizado en varias tablas
+  const claimsOp=getClaims(monthId); // reclamos operativos, reutilizado en KPI y Detalle por tienda
   const falt=s.faltante||(s.factAbonado-s.factFacturado);
   const faltPct=s.factAbonado>0?(falt/s.factAbonado*100).toFixed(1):0;
   const hasDailyData=daily&&Object.keys(daily).length>0;
@@ -2099,13 +2117,13 @@ function renderMonth(d, monthId){
       <div style="font-size:36px;font-weight:700;color:#34D399;line-height:1;letter-spacing:-.5px">${n(s.facturados)}</div>
       <div style="font-size:18px;font-weight:700;color:#fff;margin-top:5px">${m(s.factFacturadoTotal)}</div>
       <div class="scard-divider"></div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:5px">
         <span style="font-size:12px;color:#A78BFA;font-weight:600">Abonado</span>
-        <span style="font-size:16px;font-weight:700;color:#A78BFA">${m(s.factAbonado)}</span>
+        <span style="font-size:14px;font-weight:700;color:#A78BFA;white-space:nowrap">${m(s.factAbonado)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <span style="font-size:12px;color:#F87171;font-weight:600">Faltante</span>
-        <span style="font-size:16px;font-weight:700;color:#F87171">${diffLabel(falt)} <span style="font-size:10px">${faltPct}%</span></span>
+        <span style="font-size:14px;font-weight:700;color:#F87171;white-space:nowrap">${diffLabel(falt)} <span style="font-size:10px">${faltPct}%</span></span>
       </div>
     </div>
     <!-- 3 ENTREGADOS -->
@@ -2523,12 +2541,12 @@ function computeMonthStoreAggregate(monthId,coordFilter,fmtFilter){
   const storesEntries=Object.entries(d.stores||{}).filter(([,v])=>(coordFilter==='all'||v.coord===coordFilter)&&(fmtFilter==='all'||v.fmt===fmtFilter));
   const tot={p:0,factAbonado:0,factFacturado:0,ent:0,lst:0,anu:0};
   storesEntries.forEach(([,v])=>{tot.p+=v.p;tot.factAbonado+=v.factAbonado;tot.factFacturado+=v.factFacturado;tot.ent+=v.ent;tot.lst+=v.lst;tot.anu+=v.anu;});
-  const fr=computeFillRate(d.rows,MONTH_EXTRA[monthId]?.missing);
+  const fr=getFR(monthId,d.rows);
   let frPed=0,frFalt=0;
   if(fr)storesEntries.forEach(([name])=>{const ped=fr.qtyByStore[name]||0;if(ped>0){frPed+=ped;frFalt+=(fr.byStore[name]?.faltanteFR)||0;}});
   let otOnTime=0,otEval=0;
   storesEntries.forEach(([name])=>{const otS=d.onTimePrep?.byStore?.[name];if(otS&&otS.evaluated>0){otOnTime+=otS.onTime;otEval+=otS.evaluated;}});
-  const claimsM=computeClaimsOperativos(MONTH_EXTRA[monthId]?.claims);
+  const claimsM=getClaims(monthId);
   let reclCount=0;const reclByMotivo={};
   if(claimsM)storesEntries.forEach(([name])=>{
     const cs=claimsM.byStore[name];
@@ -2643,9 +2661,9 @@ function showAnnual(){
     totPed+=s.pedidos;totAbonado+=s.abonado;totFact+=s.factFacturado;totFaltante+=s.faltante;totEnt+=s.entregados;totLst+=s.listos;totAnu+=s.anulados;
     if(md.ships){totLstM+=(md.ships.rt?.lstM||0)+(md.ships.pickup?.lstM||0)+(md.ships.delivery?.lstM||0);}
     if(md.onTimePrep?.overall?.evaluated>0){totOnTime+=md.onTimePrep.overall.onTime;totOnTimeEval+=md.onTimePrep.overall.evaluated;mesesConOnTime++;}
-    const frm=computeFillRate(md.rows,MONTH_EXTRA[mo.id]?.missing);
+    const frm=getFR(mo.id,md.rows);
     if(frm){totQtyFR+=frm.totalQty;totFaltFR+=frm.totalFaltanteFR;totReempFR+=frm.totalReempFR;mesesConFillRate++;}
-    const claimsM=computeClaimsOperativos(MONTH_EXTRA[mo.id]?.claims);
+    const claimsM=getClaims(mo.id);
     if(claimsM){
       totReclamosAnual+=claimsM.total;totFactForReclAnual+=s.facturados;mesesConReclamos++;
       Object.values(claimsM.byMotivo).forEach(mot=>{
@@ -2674,13 +2692,13 @@ function showAnnual(){
       <div style="font-size:26px;font-weight:700;color:#34D399;line-height:1;letter-spacing:-.5px">${n(totEnt+totLst)}</div>
       <div style="font-size:15px;font-weight:700;color:#fff;margin-top:5px">${m(totFact)}</div>
       <div class="scard-divider"></div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:5px">
         <span style="font-size:12px;color:#A78BFA;font-weight:600">Abonado</span>
-        <span style="font-size:16px;font-weight:700;color:#A78BFA">${m(totAbonado)}</span>
+        <span style="font-size:14px;font-weight:700;color:#A78BFA;white-space:nowrap">${m(totAbonado)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <span style="font-size:12px;color:#F87171;font-weight:600">Faltante</span>
-        <span style="font-size:16px;font-weight:700;color:#F87171">-${m(totFaltante)} <span style="font-size:10px">${pctFalt}%</span></span>
+        <span style="font-size:14px;font-weight:700;color:#F87171;white-space:nowrap">-${m(totFaltante)} <span style="font-size:10px">${pctFalt}%</span></span>
       </div>
     </div>
     <div class="scard">
@@ -2705,7 +2723,7 @@ function showAnnual(){
       ${totQtyFR>0?`<div style="font-size:26px;font-weight:700;color:${otColor(totFillRatePct)};line-height:1;letter-spacing:-.5px">${totFillRatePct.toFixed(1)}%</div>
       <div style="font-size:10px;color:#9DA6BC;margin-top:5px">${mesesConFillRate} de ${loaded.length} meses con dato</div>`:
       `<div style="font-size:26px;font-weight:700;color:#7E88A0;line-height:1;letter-spacing:-.5px">—</div>
-      <div style="font-size:10px;color:#9DA6BC;margin-top:5px">Ningún mes tiene Faltantes cargado esta sesión</div>`}
+      <div style="font-size:10px;color:#9DA6BC;margin-top:5px">Ningún mes tiene Faltantes cargado todavía</div>`}
     </div>
     <div class="scard" style="border-color:${mesesConReclamos>0?reclColor(totReclPctAnual):'#3B4252'}">
       <div class="scard-label">📋 Reclamos operativos</div>
@@ -2717,7 +2735,7 @@ function showAnnual(){
         ${Object.values(totReclByMotivoAnual).sort((a,b)=>b.count-a.count).slice(0,3).map(t=>`<div style="display:flex;justify-content:space-between;gap:6px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shortClaimLabel(t.label)}</span><b style="color:#C8CDD8;flex-shrink:0">${t.count}</b></div>`).join('')}
       </div>`:
       `<div style="font-size:26px;font-weight:700;color:#7E88A0;line-height:1;letter-spacing:-.5px">—</div>
-      <div style="font-size:10px;color:#9DA6BC;margin-top:5px">Ningún mes tiene Reclamos cargado esta sesión</div>`}
+      <div style="font-size:10px;color:#9DA6BC;margin-top:5px">Ningún mes tiene Reclamos cargado todavía</div>`}
     </div>
     <div class="scard">
       <div class="scard-label">❌ Anulados</div>
@@ -2996,6 +3014,7 @@ function guardarEnNube(monthId){
       // rows (detalle fila por fila, ~15k+ filas) se usa solo en esta sesión para calcular el
       // On Time de preparación; NO se manda a la nube porque hace que el bin pese varios MB y
       // supere el límite del servicio. Se guarda igual que siempre: solo el resumen agregado.
+      snapshotFrClaims(monthId);
       const {rows,...data}=MONTH_DATA[monthId];
       console.log('[nube] Guardando mes', monthId);
 
