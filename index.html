@@ -1475,7 +1475,7 @@ function computeOnTimeFull(rows,extra){
   // el % general igual sale (solo con los 3 archivos de picking), pero sin desglose.
   const infoByOrder={};
   if(rows&&rows.length){
-    rows.forEach(r=>{infoByOrder[r._orderId]={store:r._store||'N/A',fmt:r._fmt||'—',cd:r._cd,isNpo:r._isNpo};});
+    rows.forEach(r=>{if(r._cat==='anu'||r._cat==='ing')return;infoByOrder[r._orderId]={store:r._store||'N/A',fmt:r._fmt||'—',cd:r._cd,isNpo:r._isNpo};}); // sin pendientes ni anulados — mismo criterio que Operaciones
   }
   const overall={onTime:0,late:0};
   const byFormat={},byStore={},byDay={};
@@ -1489,7 +1489,7 @@ function computeOnTimeFull(rows,extra){
     const winT=windowByOrder[oid];
     if(!endT)return;
     const info=infoByOrder[oid];
-    if(info&&info.isNpo)return; // si tenemos el detalle, respetamos que los NPO no aplican
+    if(rows&&rows.length&&(!info||info.isNpo))return; // solo pedidos del mes (sin pendientes, anulados ni NPO) — mismo criterio que Operaciones
     const ok=endT<=winT;
     ok?overall.onTime++:overall.late++;
     if(info){
@@ -1965,7 +1965,7 @@ function processExcel(raw){
       _dd:toDateStr(r.deliveryInitialDate?new Date(r.deliveryInitialDate):null),
       _ddTs:r.deliveryInitialDate?new Date(r.deliveryInitialDate).getTime():null,
       _orderId:String(r.id||'').trim(),
-      _isNpo:!!(r.isNPO===true||r.isNPO==='true'||r.isNpo===true||r.skipPicking===true),
+      _isNpo:[r.isNPO,r.isNpo,r.is_npo,r.skipPicking,r.skip_picking].some(v=>v===true||String(v).toLowerCase()==='true'),
     };
   });
   const fact=rows.filter(r=>r._cat==='ent'||r._cat==='lst');
